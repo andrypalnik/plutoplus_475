@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "linux_spi.h": "c",
+        "no_os_delay.h": "c",
+        "axi_dac_core.h": "c",
+        "no_os_error.h": "c",
+        "ad9361.h": "c",
+        "ad9361_api.h": "c",
+        "ad9361_util.h": "c"
+    }
+}
