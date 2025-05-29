@@ -6,6 +6,17 @@
         "no_os_error.h": "c",
         "ad9361.h": "c",
         "ad9361_api.h": "c",
-        "ad9361_util.h": "c"
+        "ad9361_util.h": "c",
+        "optional": "c",
+        "istream": "c",
+        "ostream": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "regex": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c"
     }
 }

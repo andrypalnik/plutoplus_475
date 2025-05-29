@@ -9,7 +9,8 @@
 #include "ad9361_api.h"
 #include <unistd.h>
 
-int main() {
+int main(int argc, char *argv[])
+{
     printf("main start\n");
     // struct no_os_gpio_desc *gpio_resetb;
     // printf("testpoint 1\n");
@@ -27,6 +28,18 @@ int main() {
     // }
 
     // printf("testpoint 3\n");
+
+
+	if (argc < 2) {
+        printf("Usage: %s <number>\n", argv[0]);
+        return 1;
+    }
+
+    int value_rx = atoi(argv[1]);
+    printf("Converted value: %d\n", value_rx);
+
+	int value_2 = atoi(argv[2]);
+    printf("Converted value: %d\n", value_2);
 
     struct no_os_spi_init_param spi_param = {
         .device_id = 1,
@@ -667,12 +680,30 @@ int main() {
     //     return -1;
     // }
 
-	// ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
-    int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
-    if (ret < 0) {
-        printf("ad9361_init failed: %d\n", ret);
-        return -1;
-    }
+	if (value_2 == 1)
+	{
+		int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
+		if (ret < 0) {
+			printf("ad9361_init failed: %d\n", ret);
+			return -1;
+    	}
+	}
+	else if (value_2 == 2)
+	{
+		int ret = ad9361_init(&ad9361_phy, &default_init_param);
+		if (ret < 0) {
+			printf("ad9361_init failed: %d\n", ret);
+			return -1;
+		}
+	}
+
+	// // ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
+    // int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
+	// //int ret = ad9361_init(&ad9361_phy, &default_init_param);
+    // if (ret < 0) {
+    //     printf("ad9361_init failed: %d\n", ret);
+    //     return -1;
+    // }
 
 
     // ad9361_spi_write(spi_desc, 0x010, 0xC0); // conf_1: default DDR
@@ -719,12 +750,43 @@ int main() {
     // // ad9361_set_rx_rf_gain(ad9361_phy, 0, 60);
     // ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 
-    ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
-    ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+	if (value_2 == 1)
+	{
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
 
 
-    ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
-    ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+
+	}
+	else if (value_2 == 2)
+	{
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+
+	}
+	
+    // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
+    // ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+
+    // ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
+    // ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+
+	// ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
+    // ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+
+    // ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
+    // ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+
+	ad9361_set_rx_lo_freq(ad9361_phy, value_rx);
     
     while (true)
     {
