@@ -9,7 +9,8 @@
 #include "ad9361_api.h"
 #include <unistd.h>
 
-int main() {
+// int main() {
+int main(int argc, char *argv[]) {
     printf("main start\n");
     // struct no_os_gpio_desc *gpio_resetb;
     // printf("testpoint 1\n");
@@ -27,6 +28,8 @@ int main() {
     // }
 
     // printf("testpoint 3\n");
+
+
 
     struct no_os_spi_init_param spi_param = {
         .device_id = 1,
@@ -83,14 +86,14 @@ int main() {
     	0,		//ensm_enable_pin_pulse_mode_enable *** adi,ensm-enable-pin-pulse-mode-enable
     	0,		//ensm_enable_txnrx_control_enable *** adi,ensm-enable-txnrx-control-enable
     	/* LO Control */
-    	5732000000UL,	//rx_synthesizer_frequency_hz *** adi,rx-synthesizer-frequency-hz
-    	5732000000UL,	//tx_synthesizer_frequency_hz *** adi,tx-synthesizer-frequency-hz
+    	5865000000UL,	//rx_synthesizer_frequency_hz *** adi,rx-synthesizer-frequency-hz
+    	5865000000UL,	//tx_synthesizer_frequency_hz *** adi,tx-synthesizer-frequency-hz
     	0,				//tx_lo_powerdown_managed_enable *** adi,tx-lo-powerdown-managed-enable
     	/* Rate & BW Control */
     	{983040000, 245760000, 122880000, 61440000, 30720000, 30720000},// rx_path_clock_frequencies[6] *** adi,rx-path-clock-frequencies
     	{983040000, 122880000, 122880000, 61440000, 30720000, 30720000},// tx_path_clock_frequencies[6] *** adi,tx-path-clock-frequencies
-    	18000000,//rf_rx_bandwidth_hz *** adi,rf-rx-bandwidth-hz
-    	18000000,//rf_tx_bandwidth_hz *** adi,rf-tx-bandwidth-hz
+    	5000000,//rf_rx_bandwidth_hz *** adi,rf-rx-bandwidth-hz
+    	5000000,//rf_tx_bandwidth_hz *** adi,rf-tx-bandwidth-hz
     	/* RF Port Control */
     	0,		//rx_rf_port_input_select *** adi,rx-rf-port-input-select
     	0,		//tx_rf_port_input_select *** adi,tx-rf-port-input-select
@@ -429,40 +432,58 @@ int main() {
     printf("REG_PARALLEL_PORT_CONF_3: 0x%02X\n", port_conf);
 
 
-    struct rf_rssi rssi;
-    int32_t gain;
 
-    // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
     ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_MGC);
+	
+	if (argc >= 2) {
+    	uint64_t rx_freq = strtoull(argv[1], NULL, 10); // частота в Гц 
+    	ad9361_set_rx_lo_freq(ad9361_phy, rx_freq);
+    	printf("Set RX & TX frequency: %llu Hz\n", rx_freq);
+	}
+	
+	if (argc >= 3) {
+    	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
+		int32_t rx_gain = (int32_t)strtol(argv[2], NULL, 10); // дБ
+    	ad9361_set_rx_rf_gain(ad9361_phy, 0, rx_gain);
+    	printf("Set RX0 GAIN: %d DB\n", rx_gain);
+	}
 
-    // ad9361_set_rx_rf_gain(ad9361_phy, 0, 60);
+	
+    	
     ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+
+    ad9361_set_rx_rf_bandwidth(ad9361_phy, 5000000); // 10 МГц
+	ad9361_set_rx_sampling_freq(ad9361_phy, 15000000);
+
     
-    while (true)
-    {
+    // struct rf_rssi rssi;
+    // int32_t gain;
 
-        if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
-            printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX0 RSSI\n");
+    // while (true)
+    // {
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
-        printf("Gain: %d dB\n", gain);
+    //     if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
+    //         printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+    //         // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+    //     else
+    //         printf("Failed to read RX0 RSSI\n");
+
+    //     ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
+    //     printf("Gain: %d dB\n", gain);
  
-        if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
-            printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
-            // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX1 RSSI\n");
+    //     if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
+    //         printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+    //         // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
+    //         // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+    //     else
+    //         printf("Failed to read RX1 RSSI\n");
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
-        printf("Gain: %d dB\n", gain);
+    //     ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
+    //     printf("Gain: %d dB\n", gain);
 
-        printf("while\n");
-        sleep(1);
-    }
+    //     printf("while\n");
+    //     sleep(1);
+    // }
 
     
 
