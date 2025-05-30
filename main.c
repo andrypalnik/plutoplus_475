@@ -8,6 +8,9 @@
 #include "ad9361.h"
 #include "ad9361_api.h"
 #include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <inttypes.h>
 
 int main(int argc, char *argv[])
 {
@@ -28,18 +31,6 @@ int main(int argc, char *argv[])
     // }
 
     // printf("testpoint 3\n");
-
-
-	if (argc < 2) {
-        printf("Usage: %s <number>\n", argv[0]);
-        return 1;
-    }
-
-    int value_rx = atoi(argv[1]);
-    printf("Converted value: %d\n", value_rx);
-
-	int value_2 = atoi(argv[2]);
-    printf("Converted value: %d\n", value_2);
 
     struct no_os_spi_init_param spi_param = {
         .device_id = 1,
@@ -67,7 +58,7 @@ int main(int argc, char *argv[])
 
     AD9361_InitParam default_init_param = {
     	/* Device selection */
-    	ID_AD9361,	// dev_sel
+    	ID_AD9363A,	// dev_sel
     	/* Reference Clock */
     	40000000UL,	//reference_clk_rate
     	/* Base Configuration */
@@ -660,51 +651,87 @@ int main(int argc, char *argv[])
     };
     printf("testpoint 1\n");
 
-
     // default_init_param.gpio_resetb.number = 973;
     // default_init_param.gpio_sync.number = -1;
     // default_init_param.gpio_cal_sw1.number = -1;
     // default_init_param.gpio_cal_sw2.number = -1;
 
-	default_init_param_fast_agc.gpio_resetb.number = 973;
-    default_init_param_fast_agc.gpio_sync.number = -1;
-    default_init_param_fast_agc.gpio_cal_sw1.number = -1;
-    default_init_param_fast_agc.gpio_cal_sw2.number = -1;
+
  
 
     struct ad9361_rf_phy *ad9361_phy;
-    // // ad9361_init(&ad9361_phy, &default_init_param);
-    // int ret = ad9361_init(&ad9361_phy, &default_init_param);
-    // if (ret < 0) {
-    //     printf("ad9361_init failed: %d\n", ret);
-    //     return -1;
-    // }
 
-	if (value_2 == 1)
-	{
-		int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
-		if (ret < 0) {
-			printf("ad9361_init failed: %d\n", ret);
-			return -1;
-    	}
+	// if (ad9361_phy == NULL)
+	// {
+	// 	return -1;
+	// }
+
+
+	int agc_mode = 0;
+
+	if (argc >= 3) {
+
+		agc_mode = atoi(argv[2]);
+		printf("agc_mode: %d\n", agc_mode);
+
+		if (agc_mode == 1)
+		{
+			default_init_param_fast_agc.gpio_resetb.number = 973;
+    		default_init_param_fast_agc.gpio_sync.number = -1;
+    		default_init_param_fast_agc.gpio_cal_sw1.number = -1;
+    		default_init_param_fast_agc.gpio_cal_sw2.number = -1;
+
+			int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
+			if (ret < 0) {
+				printf("ad9361_init failed: %d\n", ret);
+				return -1;
+			}
+
+			ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
+			ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+			ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
+			ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+		}
+		else if (agc_mode == 2)
+		{
+			default_init_param.gpio_resetb.number = 973;
+    		default_init_param.gpio_sync.number = -1;
+    		default_init_param.gpio_cal_sw1.number = -1;
+    		default_init_param.gpio_cal_sw2.number = -1;
+
+			int ret = ad9361_init(&ad9361_phy, &default_init_param);
+			if (ret < 0) {
+				printf("ad9361_init failed: %d\n", ret);
+				return -1;
+			}
+
+			ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
+			ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+			ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
+			ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+		}
 	}
-	else if (value_2 == 2)
-	{
+	else if (argc >= 2) {
+
+		default_init_param.gpio_resetb.number = 973;
+		default_init_param.gpio_sync.number = -1;
+		default_init_param.gpio_cal_sw1.number = -1;
+		default_init_param.gpio_cal_sw2.number = -1;
+
 		int ret = ad9361_init(&ad9361_phy, &default_init_param);
 		if (ret < 0) {
 			printf("ad9361_init failed: %d\n", ret);
 			return -1;
 		}
+
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+
+		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
+		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 	}
-
-	// // ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
-    // int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
-	// //int ret = ad9361_init(&ad9361_phy, &default_init_param);
-    // if (ret < 0) {
-    //     printf("ad9361_init failed: %d\n", ret);
-    //     return -1;
-    // }
-
 
     // ad9361_spi_write(spi_desc, 0x010, 0xC0); // conf_1: default DDR
     // ad9361_spi_write(spi_desc, 0x011, 0x00); // conf_2: default
@@ -750,27 +777,54 @@ int main(int argc, char *argv[])
     // // ad9361_set_rx_rf_gain(ad9361_phy, 0, 60);
     // ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 
+	//ad9361_init(&ad9361_phy, &default_init_param);
 
-	if (value_2 == 1)
-	{
-		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
-		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+	// int value_2 = 0;
+
+	// if (argc >= 3) {
+
+	// 	int value_2 = atoi(argv[2]);
+	// 	printf("Converted value: %d\n", value_2);
+
+	// 	if (value_2 == 1)
+	// 	{
+	// 		int ret = ad9361_init(&ad9361_phy, &default_init_param_fast_agc);
+	// 		if (ret < 0) {
+	// 			printf("ad9361_init failed: %d\n", ret);
+	// 			return -1;
+	// 		}
+	// 	}
+	// 	else if (value_2 == 2)
+	// 	{
+	// 		int ret = ad9361_init(&ad9361_phy, &default_init_param);
+	// 		if (ret < 0) {
+	// 			printf("ad9361_init failed: %d\n", ret);
+	// 			return -1;
+	// 		}
+	// 	}
+
+	// 	if (value_2 == 1)
+	// 	{
+	// 		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
+	// 		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
 
 
-		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
-		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+	// 		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
+	// 		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 
-	}
-	else if (value_2 == 2)
-	{
-		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
-		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+	// 	}
+	// 	else if (value_2 == 2)
+	// 	{
+	// 		ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
+	// 		ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
 
 
-		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
-		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
+	// 		ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
+	// 		ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 
-	}
+	// 	}
+
+	// }
 	
     // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
     // ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
@@ -786,36 +840,52 @@ int main(int argc, char *argv[])
     // ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
     // ad9361_set_rx_rf_gain(ad9361_phy, 1, 0);
 
-	ad9361_set_rx_lo_freq(ad9361_phy, value_rx);
-    
-    while (true)
-    {
+	// if (argc >= 2) {
 
-        if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
-            printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX0 RSSI\n");
+	// 	uint64_t value_rx = strtoull(argv[1], NULL, 10);
+    // 	printf("Converted value_rx: %" PRIu64 "\n", value_rx);
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
-        printf("Gain: %d dB\n", gain);
+	// 	ad9361_set_rx_lo_freq(ad9361_phy, value_rx);
+	// 	ad9361_set_tx_lo_freq(ad9361_phy, value_rx);
+
+	// 	printf("Set RX & TX frequency: %" PRIu64 "\n", value_rx);
+	// }
+
+	if (argc >= 2) {
+    	uint64_t rx_freq = strtoull(argv[1], NULL, 10); // частота в Гц 
+    	ad9361_set_rx_lo_freq(ad9361_phy, rx_freq);
+    	printf("Set RX & TX frequency: %llu Hz\n", rx_freq);
+	}
+
+    // while (true)
+    // {
+
+    //     if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
+    //         printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+    //         // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+    //     else
+    //         printf("Failed to read RX0 RSSI\n");
+
+    //     ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
+    //     printf("Gain: %d dB\n", gain);
  
-        if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
-            printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
-            // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX1 RSSI\n");
+    //     if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
+    //         printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+    //         // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
+    //         // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+    //     else
+    //         printf("Failed to read RX1 RSSI\n");
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
-        printf("Gain: %d dB\n", gain);
+    //     ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
+    //     printf("Gain: %d dB\n", gain);
 
-        printf("while\n");
-        sleep(1);
-    }
+    //     printf("while\n");
+    //     sleep(1);
+    // }
 
-    
+    printf("Success\n");
 
-    sleep(1);
+    //sleep(1);
+	return 0;
 
 }
