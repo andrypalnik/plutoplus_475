@@ -18,6 +18,7 @@
         "tuple": "c",
         "type_traits": "c",
         "utility": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "unistd.h": "c"
     }
 }
