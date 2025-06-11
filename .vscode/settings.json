@@ -19,6 +19,15 @@
         "type_traits": "c",
         "utility": "c",
         "cstdlib": "c",
-        "unistd.h": "c"
-    }
+        "unistd.h": "c",
+        "stdint.h": "c",
+        "no_os_spi.h": "c",
+        "linux_gpio.h": "c",
+        "stdbool.h": "c",
+        "no_os_axi_io.h": "c",
+        "axi_dmac.h": "c",
+        "fcntl.h": "c",
+        "no_os_alloc.h": "c"
+    },
+    "cmake.sourceDirectory": "/home/isatskyi/Documents/V_J/plutoplus_475/no-OS/doc/doxygen"
 }

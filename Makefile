@@ -31,7 +31,8 @@ SRC = \
     no-OS/util/no_os_clk.c \
     no-OS/drivers/axi_core/axi_adc_core/axi_adc_core.c \
     no-OS/drivers/platform/linux/linux_axi_io.c \
-	no-OS/drivers/rf-transceiver/ad9361/ad9361_conv.c
+	no-OS/drivers/rf-transceiver/ad9361/ad9361_conv.c \
+    no-OS/drivers/axi_core/axi_dmac/axi_dmac.c
 
 
 
