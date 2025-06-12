@@ -13,7 +13,7 @@
 #include "no_os_error.h"
 #include "no_os_axi_io.h"
 #include "no_os_alloc.h"
-#include "no-OS/drivers/axi_core/axi_dmac/axi_dmac.h"
+//#include "no-OS/drivers/axi_core/axi_dmac/axi_dmac.h"
 
 #include "ad9361.h"
 #include "ad9361_api.h"
@@ -377,10 +377,10 @@ struct no_os_spi_init_param spi_param = {
 // 	.irq_option = IRQ_DISABLED,
 // };
 
-#include "no-OS/drivers/axi_core/axi_dmac/axi_dmac.h"
+//#include "no-OS/drivers/axi_core/axi_dmac/axi_dmac.h"
 
 // ... (інші інклуди, як у тебе в коді)
-
+#if 0
 #define DMAC_BASEADDR   0x40400000   // Твоя адреса DMA (з Address Editor)
 #define MEM_BUF_ADDR    0x1F400000  // Наприклад, адреса у DDR, вирішуй сам (НЕ конфліктуй з ядром!)
 
@@ -474,6 +474,61 @@ void dma_read_and_save() {
     // 7. Clean up
     free(sample_buffer);
     axi_dmac_remove(dmac);
+}
+#endif
+
+#include <sys/ioctl.h>
+
+#define DMA_PROXY_BUF_SIZE (4 * 1024 * 1024)  // розмір має відповідати тому, що виділяється драйвером
+#define START_XFER   _IOW('q', 1, int)
+#define FINISH_XFER  _IOW('q', 2, int)
+
+void dma_proxy_read_and_save(void);
+
+void dma_proxy_read_and_save() {
+    int fd_rx = open("/dev/dma_proxy_rx", O_RDWR);
+    if (fd_rx < 0) {
+        perror("Open /dev/dma_proxy_rx failed");
+        return;
+    }
+
+    // mmap() DMA буфера
+    void *rx_buffer = mmap(NULL, DMA_PROXY_BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd_rx, 0);
+    if (rx_buffer == MAP_FAILED) {
+        perror("mmap failed");
+        close(fd_rx);
+        return;
+    }
+
+    int buf_idx = 0; // Зазвичай 0, бо в драйвері BUFFER_COUNT=1
+
+    // Початок DMA
+    if (ioctl(fd_rx, START_XFER, &buf_idx) < 0) {
+        perror("START_XFER ioctl failed");
+        goto cleanup;
+    }
+
+	sleep(2);
+
+    // Чекати завершення
+    if (ioctl(fd_rx, FINISH_XFER, &buf_idx) < 0) {
+        perror("FINISH_XFER ioctl failed");
+        goto cleanup;
+    }
+
+    // Зберегти у файл
+    FILE *f = fopen("/media/card/dma_proxy_data.bin", "wb");
+    if (!f) {
+        perror("Can't open file");
+        goto cleanup;
+    }
+    fwrite(rx_buffer, 1, DMA_PROXY_BUF_SIZE, f);
+    fclose(f);
+    printf("DMA proxy saved %d bytes to SD\n", DMA_PROXY_BUF_SIZE);
+
+cleanup:
+    munmap(rx_buffer, DMA_PROXY_BUF_SIZE);
+    close(fd_rx);
 }
 
 
@@ -622,9 +677,10 @@ int main(int argc, char *argv[]) {
     // }
     // printf("DMA RX finished! Saving to SD...\n");
 
-	sleep(1);
-	dma_read_and_save();
-	sleep(1);
+	sleep(2);
+	//dma_read_and_save();
+	dma_proxy_read_and_save();
+	sleep(2);
 
     while (true)
     {
