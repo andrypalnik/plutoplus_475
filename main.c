@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <fcntl.h>
 #include "linux_spi.h"
 #include "linux_gpio.h"
 #include "no_os_delay.h" 
@@ -351,6 +352,17 @@ struct no_os_spi_init_param spi_param = {
 	.extra = "/dev/spidev1.0"
 };
 
+// DDR read -> file
+#define DMA_BASEADDR      0x40400000
+#define DDR_DEST_ADDR     0x1F400000
+#define TRANSFER_SIZE     (4 * 1024 * 1024) // 4 MB
+
+// DMA S2MM register offsets
+#define DMA_S2MM_CONTROL  0x30
+#define DMA_S2MM_STATUS   0x34
+#define DMA_S2MM_DEST     0x48
+#define DMA_S2MM_LENGTH   0x58
+
 // #define DMA_BASEADDR 0x40400000 // Заміни на свою!
 // #define DMA_TRANSFER_LEN  (4*1024*1024) // 4 МБ, скільки семплів хочеш
 
@@ -477,6 +489,7 @@ void dma_read_and_save() {
 }
 #endif
 
+#if 0
 #include <sys/ioctl.h>
 
 #define DMA_PROXY_BUF_SIZE (4 * 1024 * 1024)  // розмір має відповідати тому, що виділяється драйвером
@@ -530,7 +543,87 @@ cleanup:
     munmap(rx_buffer, DMA_PROXY_BUF_SIZE);
     close(fd_rx);
 }
+#endif
 
+#if 1
+
+void dma_ddr_read_and_save(void);
+
+void dma_ddr_read_and_save() {
+    int fd = -1;
+    volatile uint32_t *dma_regs = NULL;
+    void *ddr_buffer = NULL;
+
+    fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (fd < 0) {
+        perror("open /dev/mem");
+        return;
+    }
+
+    dma_regs = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, DMA_BASEADDR);
+    if (dma_regs == MAP_FAILED) {
+        perror("mmap dma_regs");
+        close(fd);
+        return;
+    }
+
+    ddr_buffer = mmap(NULL, TRANSFER_SIZE, PROT_READ, MAP_SHARED, fd, DDR_DEST_ADDR);
+    if (ddr_buffer == MAP_FAILED) {
+        perror("mmap ddr_buffer");
+        munmap((void*)dma_regs, 4096);
+        close(fd);
+        return;
+    }
+
+    // Reset DMA (bit 2), потім enable (bit 0)
+    dma_regs[DMA_S2MM_CONTROL / 4] = 0x4;
+    usleep(1000);
+    dma_regs[DMA_S2MM_CONTROL / 4] = 0x1;
+
+    // Clear status (записом тих самих бітів що хочемо скинути)
+    dma_regs[DMA_S2MM_STATUS / 4] = 0xFFFFFFFF;
+
+    printf("Before DEST write: 0x%08X\n", dma_regs[DMA_S2MM_DEST / 4]);
+    dma_regs[DMA_S2MM_DEST / 4] = DDR_DEST_ADDR;
+    printf("After DEST write: 0x%08X\n", dma_regs[DMA_S2MM_DEST / 4]);
+
+    dma_regs[DMA_S2MM_LENGTH / 4] = TRANSFER_SIZE;
+    printf("After LEN write: 0x%08X\n", dma_regs[DMA_S2MM_LENGTH / 4]);
+
+    printf("Waiting for DMA transfer to complete...\n");
+
+    // Очікуємо bit 12 (IOC_Irq)
+    int timeout = 100000; // ~100 сек (в мс)
+    while (!(dma_regs[DMA_S2MM_STATUS / 4] & (1 << 12))) {
+        usleep(1000);
+        timeout--;
+        if (timeout <= 0) {
+            fprintf(stderr, "DMA timeout! Status: 0x%08X\n", dma_regs[DMA_S2MM_STATUS / 4]);
+            goto cleanup;
+        }
+    }
+
+    printf("DMA transfer complete! Status: 0x%08X\n", dma_regs[DMA_S2MM_STATUS / 4]);
+
+    FILE *f = fopen("/media/card/dma_dump.bin", "wb");
+    if (!f) {
+        perror("Can't open output file");
+        goto cleanup;
+    }
+
+    fwrite(ddr_buffer, 1, TRANSFER_SIZE, f);
+    fclose(f);
+    printf("DMA data saved to /media/card/dma_dump.bin (%d bytes)\n", TRANSFER_SIZE);
+
+cleanup:
+    if (ddr_buffer && ddr_buffer != MAP_FAILED)
+        munmap(ddr_buffer, TRANSFER_SIZE);
+    if (dma_regs && dma_regs != MAP_FAILED)
+        munmap((void*)dma_regs, 4096);
+    if (fd >= 0)
+        close(fd);
+}
+#endif
 
 // int main() {
 int main(int argc, char *argv[]) {
@@ -677,35 +770,43 @@ int main(int argc, char *argv[]) {
     // }
     // printf("DMA RX finished! Saving to SD...\n");
 
+	/*
 	sleep(2);
 	//dma_read_and_save();
 	dma_proxy_read_and_save();
 	sleep(2);
+	*/
+	// sleep(1);
+	// dma_ddr_read_and_save();
+	// sleep(1);
 
     while (true)
     {
 
-        if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
-            printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX0 RSSI\n");
+		dma_ddr_read_and_save();
+		usleep(100000);
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
-        printf("Gain: %d dB\n", gain);
+        // if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
+        //     printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+        //     // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+        // else
+        //     printf("Failed to read RX0 RSSI\n");
+
+        // ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
+        // printf("Gain: %d dB\n", gain);
  
-        if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
-            printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-            // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
-            // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        else
-            printf("Failed to read RX1 RSSI\n");
+        // if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
+        //     printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+        //     // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
+        //     // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+        // else
+        //     printf("Failed to read RX1 RSSI\n");
 
-        ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
-        printf("Gain: %d dB\n", gain);
+        // ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
+        // printf("Gain: %d dB\n", gain);
 
-        printf("while\n");
-        sleep(1);
+        // printf("while\n");
+        // sleep(1);
     }
 
     
