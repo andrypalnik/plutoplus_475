@@ -27,7 +27,11 @@
         "no_os_axi_io.h": "c",
         "axi_dmac.h": "c",
         "fcntl.h": "c",
-        "no_os_alloc.h": "c"
+        "no_os_alloc.h": "c",
+        "main.h": "c",
+        "bitset": "c",
+        "chrono": "c",
+        "algorithm": "c"
     },
     "cmake.sourceDirectory": "/home/isatskyi/Documents/V_J/plutoplus_475/no-OS/doc/doxygen"
 }
