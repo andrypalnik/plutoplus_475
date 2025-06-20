@@ -545,7 +545,7 @@ cleanup:
 }
 #endif
 
-#if 1
+#if 0
 
 void dma_ddr_read_and_save(void);
 
@@ -622,6 +622,55 @@ cleanup:
         munmap((void*)dma_regs, 4096);
     if (fd >= 0)
         close(fd);
+}
+#endif
+
+#if 1
+#define MAP_SIZE 4096UL
+#define MAP_MASK (MAP_SIZE - 1)
+
+uint32_t fpga_read_reg(off_t phys_addr);
+
+uint32_t fpga_read_reg(off_t phys_addr)
+{
+    int mem_fd;
+    void *map_base, *virt_addr;
+    uint32_t read_result;
+
+    // Відкриваємо /dev/mem
+    mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (mem_fd < 0) {
+        perror("open /dev/mem");
+        exit(EXIT_FAILURE);
+    }
+
+    // Відображаємо сторінку пам’яті, що містить потрібну фізичну адресу
+    map_base = mmap(
+        NULL,
+        MAP_SIZE,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        mem_fd,
+        phys_addr & ~MAP_MASK
+    );
+
+    if (map_base == MAP_FAILED) {
+        perror("mmap");
+        close(mem_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Віртуальна адреса потрібного регістра
+    virt_addr = map_base + (phys_addr & MAP_MASK);
+
+    // Зчитування 32-бітного значення
+    read_result = *((volatile uint32_t *)virt_addr);
+
+    // Очищення
+    munmap(map_base, MAP_SIZE);
+    close(mem_fd);
+
+    return read_result;
 }
 #endif
 
@@ -741,7 +790,7 @@ int main(int argc, char *argv[]) {
 	}
 
     ad9361_set_rx_rf_bandwidth(ad9361_phy, 5000000); // 10 МГц
-	ad9361_set_rx_sampling_freq(ad9361_phy, 15000000);
+	ad9361_set_rx_sampling_freq(ad9361_phy, 30000000);
 
     sleep(1);
 
@@ -783,30 +832,34 @@ int main(int argc, char *argv[]) {
     while (true)
     {
 
-		dma_ddr_read_and_save();
-		usleep(100000);
+		// dma_ddr_read_and_save();
+		// usleep(100000);
 
-        // if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
-        //     printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-        //     // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        // else
-        //     printf("Failed to read RX0 RSSI\n");
+        if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
+            printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+            // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+        else
+            printf("Failed to read RX0 RSSI\n");
 
-        // ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
-        // printf("Gain: %d dB\n", gain);
+        ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
+        printf("Gain: %d dB\n", gain);
  
-        // if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
-        //     printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-        //     // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
-        //     // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        // else
-        //     printf("Failed to read RX1 RSSI\n");
+        if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
+            printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+            // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
+            // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+        else
+            printf("Failed to read RX1 RSSI\n");
 
-        // ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
-        // printf("Gain: %d dB\n", gain);
+        ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
+        printf("Gain: %d dB\n", gain);
 
-        // printf("while\n");
-        // sleep(1);
+		off_t my_register = 0x43C00000;  // заміни на свою адресу
+    	uint32_t value = fpga_read_reg(my_register);
+    	printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
+
+        printf("while\n");
+        sleep(1);
     }
 
     
