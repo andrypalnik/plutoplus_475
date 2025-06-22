@@ -229,35 +229,42 @@ int main(int argc, char *argv[]) {
 
     while (true)
     {
-        // if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
-        //     printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-        //     // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        // else
-        //     printf("Failed to read RX0 RSSI\n");
 
-        // ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
-        // printf("Gain: %d dB\n", gain);
- 
-        // if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
-        //     printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
-        //     // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
-        //     // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
-        // else
-        //     printf("Failed to read RX1 RSSI\n");
+        if (argc >= 2)
+        {
+            if (ad9361_get_rx_rssi(ad9361_phy, 0, &rssi) == 0)
+                printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+                // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+            else
+                printf("Failed to read RX0 RSSI\n");
 
-        // ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
-        // printf("Gain: %d dB\n", gain);
+            ad9361_get_rx_rf_gain(ad9361_phy, 0, &gain);
+            printf("Gain: %d dB\n", gain);
+    
+            if (ad9361_get_rx_rssi(ad9361_phy, 1, &rssi) == 0)
+                printf("RX1 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+                // printf("RX1 RSSI: %.1f dB\n", (double)rssi.symbol);
+                // printf("RX1 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+            else
+                printf("Failed to read RX1 RSSI\n");
 
-		// off_t my_register = 0x43C00000;  // заміни на свою адресу
-    	// uint32_t value = fpga_read_reg(my_register);
-    	// //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
-		// printf("Зчитано з 0x%lX: %d\n", (unsigned long)my_register, value);
+            ad9361_get_rx_rf_gain(ad9361_phy, 1, &gain);
+            printf("Gain: %d dB\n", gain);
 
-        // printf("while\n");
+            off_t my_register = 0x43C00000;  // заміни на свою адресу
+            uint32_t value = fpga_read_reg(my_register);
+            //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
+            printf("Зчитано з 0x%lX: %d\n", (unsigned long)my_register, value);
 
-		off_t my_register = 0x43C00000;
-		scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
-        //sleep(1);
+            printf("while\n");
+            sleep(1);
+        }
+        else
+        {
+            off_t my_register = 0x43C00000;
+		    scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
+        }
+
     }
 
     sleep(1);
