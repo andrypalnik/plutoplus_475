@@ -43,7 +43,7 @@ TARGET = spi_hal_test
 all: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 clean:
 	rm -f $(TARGET)

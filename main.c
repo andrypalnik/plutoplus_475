@@ -57,16 +57,19 @@ uint32_t fpga_read_reg(off_t phys_addr)
     return read_result;
 }
 
+#define START_FREQ   1000
+#define STOP_FREQ    1100  
+
 void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
 {
     struct rf_rssi rssi;
     uint32_t value;
     int32_t gain;
-	const int delay = 10000;
+	const int delay = 5000;
 	int circle_time;
 
-    for (uint16_t i = 0; i < count; i++) {
-         int freq_mhz = freqs[i];
+    for (uint16_t i = START_FREQ; i < STOP_FREQ; i+=1) {
+         int freq_mhz = i;
          uint64_t freq_hz = (uint64_t)freq_mhz * 1000000ULL;
 
         //uint64_t freq_hz = (uint64_t)1080000000ULL;
@@ -77,29 +80,437 @@ void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off
         // Очікуємо стабілізацію AGC / RSSI
         usleep(delay); // 5 мс
 
-	
 
         // Зчитуємо значення з FPGA-регістра
         value = fpga_read_reg(reg_addr);
 
+        if (ad9361_get_rx_rssi(phy, 0, &rssi) == 0)
+            printf("RX0 sym = %u, mult = %d", rssi.symbol, rssi.multiplier);
+            // printf("RX0 RSSI: %.1f dB   ",(double)rssi.symbol * (double)rssi.multiplier / 1000.0);
+        else
+            printf("Failed to read RX0 RSSI\n");
+
+        ad9361_get_rx_rf_gain(phy, 0, &gain);
+		printf("Gain: %d dB\n", gain);
+
+        printf("Зчитано з 0x%lX: %d\n", (unsigned long)reg_addr, value);
+        printf("\n[!] Детекція сигналу на частоті %d МГц (value = %u)\n", freq_mhz, value);
 	    
 
-        if (value > 50) {
-			printf("Зчитано з 0x%lX: %d\n", (unsigned long)reg_addr, value);
-            printf("\n[!] Детекція сигналу на частоті %d МГц (value = %u)\n", freq_mhz, value);
+        // if (value > 50) {
+		// 	printf("Зчитано з 0x%lX: %d\n", (unsigned long)reg_addr, value);
+        //     printf("\n[!] Детекція сигналу на частоті %d МГц (value = %u)\n", freq_mhz, value);
 
-			ad9361_get_rx_rf_gain(phy, 0, &gain);
-			printf("Gain: %d dB\n", gain);
-        }
+		// 	//ad9361_get_rx_rf_gain(phy, 0, &gain);
+		// 	//printf("Gain: %d dB\n", gain);
+        // }
     }
 
-	circle_time = ((delay*count)/1000);
+	circle_time = ((delay*(STOP_FREQ - START_FREQ))/1000);
 
 	printf("time spent for one circle is %d ms\n", circle_time);
 }
 #endif
 
+#define RSSI_OFFSET_DBM -41.7  // Емпірично підібраний offset
 
+void scan_frequencies_for_manual_mode(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
+{
+    struct rf_rssi rssi;
+    uint32_t value;
+    int32_t gain;
+    const int delay = 5000;
+    int circle_time;
+
+    FILE *f = fopen("/tmp/rssi_scan.csv", "w");
+    if (!f) {
+        perror("Не вдалося відкрити файл для запису");
+        return;
+    }
+    fprintf(f, "Frequency_MHz,RSSI_dBm,G_gain_dB,FPGA_value\n");
+
+    for (uint16_t i = START_FREQ; i <= STOP_FREQ; i += 1) {
+        int freq_mhz = i;
+        uint64_t freq_hz = (uint64_t)freq_mhz * 1000000ULL;
+
+        ad9361_set_rx_lo_freq(phy, freq_hz);
+        usleep(delay); // стабілізація
+
+        value = fpga_read_reg(reg_addr);
+
+        if (ad9361_get_rx_rssi(phy, 0, &rssi) == 0) {
+            ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+            //double rssi_dbm;
+            double rssi_dbm = (rssi.symbol > 0)
+                ? 10.0 * log10((double)rssi.symbol) + RSSI_OFFSET_DBM
+                : -120.0;
+
+            printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+            printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+            printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+                rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+            printf("Gain: %d dB, RSSI ≈ %.2f dBm\n\n", gain, rssi_dbm);
+
+            fprintf(f, "%d,%.2f,%d,%u\n", freq_mhz, rssi_dbm, gain, value);
+        } else {
+            printf("Не вдалося зчитати RSSI\n");
+        }
+    }
+
+    fclose(f);
+    circle_time = ((delay * (STOP_FREQ - START_FREQ)) / 1000);
+    printf("time spent for one circle is %d ms\n", circle_time);
+}
+
+void scan_frequencies_2(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
+{
+    struct rf_rssi rssi;
+    uint32_t value;
+    int32_t gain;
+    const int delay = 5000;
+    int circle_time;
+
+    FILE *f = fopen("/tmp/rssi_scan.csv", "w");
+    if (!f) {
+        perror("Не вдалося відкрити файл для запису");
+        return;
+    }
+    fprintf(f, "Frequency_MHz,RSSI_dBm,G_gain_dB,FPGA_value\n");
+
+    // Буфер для зібраних частот
+    typedef struct {
+        int freq_mhz;
+        uint32_t symbol;
+        uint32_t preamble;
+        uint32_t fpga_value;
+    } rssi_data_t;
+
+    rssi_data_t results[STOP_FREQ - START_FREQ + 1];
+    int collected = 0;
+    bool collecting = false;
+
+    for (uint16_t i = START_FREQ; i <= STOP_FREQ; i += 1) {
+        int freq_mhz = i;
+        uint64_t freq_hz = (uint64_t)freq_mhz * 1000000ULL;
+
+        ad9361_set_rx_lo_freq(phy, freq_hz);
+        usleep(delay); // стабілізація
+
+        value = fpga_read_reg(reg_addr);
+
+        if (value >= 0) {
+            collecting = true;
+
+            if (ad9361_get_rx_rssi(phy, 0, &rssi) == 0) {
+                
+
+                double rssi_dbm = (rssi.symbol > 0)
+                    ? 10.0 * log10((double)rssi.symbol) + RSSI_OFFSET_DBM
+                    : -120.0;
+                
+                ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+                // printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+                // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+                // printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+                // rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+
+                printf("Gain: %d dB, RSSI ≈ %.2f dBm\n\n", gain, rssi_dbm);
+                fprintf(f, "%d,%.2f,%d,%u\n", freq_mhz, rssi_dbm, gain, value);
+
+                results[collected++] = (rssi_data_t){
+                    .freq_mhz = freq_mhz,
+                    .symbol = rssi.symbol,
+                    .preamble = rssi.preamble,
+                    .fpga_value = value
+                };
+            }
+        } else if (collecting) {
+            // Якщо раніше йшло збирання, і тепер value == 0 — завершити
+            break;
+        }
+        
+        ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+        printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+        printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+        printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+        rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+    }
+
+    fclose(f);
+    circle_time = ((delay * (STOP_FREQ - START_FREQ)) / 1000);
+    printf("time spent for one circle is %d ms\n", circle_time);
+
+    // Аналіз зібраного: знайти мінімальне abs(symbol - preamble)
+    if (collected > 0) {
+        int min_diff = abs((int)results[0].symbol - (int)results[0].preamble);
+        int best_freq = results[0].freq_mhz;
+
+        for (int i = 1; i < collected; i++) {
+            int diff = abs((int)results[i].symbol - (int)results[i].preamble);
+            if (diff > min_diff) {
+                min_diff = diff;
+                best_freq = results[i].freq_mhz;
+            }
+        }
+
+        printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n", best_freq, min_diff);
+    } else {
+        printf("Не виявлено жодного сигналу з FPGA регістром > 0\n");
+    }
+}
+
+
+void scan_frequencies_3(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
+{
+    struct rf_rssi rssi;
+    uint32_t value;
+    int32_t gain;
+    const int delay = 5000;
+    int circle_time;
+
+    FILE *f = fopen("/tmp/rssi_scan.csv", "w");
+    if (!f) {
+        perror("Не вдалося відкрити файл для запису");
+        return;
+    }
+    fprintf(f, "Frequency_MHz,RSSI_dBm,G_gain_dB,FPGA_value\n");
+
+    typedef struct {
+        int freq_mhz;
+        uint32_t symbol;
+        uint32_t preamble;
+        uint32_t fpga_value;
+    } rssi_data_t;
+
+    rssi_data_t *cluster = malloc(sizeof(rssi_data_t) * (STOP_FREQ - START_FREQ + 1));
+    if (!cluster) {
+        perror("malloc");
+        fclose(f);
+        return;
+    }
+    int cluster_size = 0;
+    bool collecting = false;
+
+    for (uint16_t i = START_FREQ; i <= STOP_FREQ; i += 1) {
+        int freq_mhz = i;
+        uint64_t freq_hz = (uint64_t)freq_mhz * 1000000ULL;
+
+        ad9361_set_rx_lo_freq(phy, freq_hz);
+        usleep(delay);
+
+        value = fpga_read_reg(reg_addr);
+
+        if (value > 50) {
+            collecting = true;
+
+            if (ad9361_get_rx_rssi(phy, 0, &rssi) == 0) {
+                ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+                double rssi_dbm = (rssi.symbol > 0)
+                    ? 10.0 * log10((double)rssi.symbol) + RSSI_OFFSET_DBM
+                    : -120.0;
+
+                //  printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+                //  printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+                //  printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+                //      rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+                // printf("Gain: %d dB, RSSI ≈ %.2f dBm\n\n", gain, rssi_dbm);
+
+                fprintf(f, "%d,%.2f,%d,%u\n", freq_mhz, rssi_dbm, gain, value);
+
+                cluster[cluster_size++] = (rssi_data_t){
+                    .freq_mhz = freq_mhz,
+                    .symbol = rssi.symbol,
+                    .preamble = rssi.preamble,
+                    .fpga_value = value
+                };
+            }
+        } else if (collecting && cluster_size > 0) {
+            // Обробка зібраного кластеру
+            int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
+            int best_freq = cluster[0].freq_mhz;
+
+            for (int j = 1; j < cluster_size; j++) {
+                int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                if (diff > min_diff) {
+                    min_diff = diff;
+                    best_freq = cluster[j].freq_mhz;
+                }
+            }
+
+            // ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+            // printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+            // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+            // printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+            // rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+
+            printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+
+            // Готуємось до нового кластеру
+            cluster_size = 0;
+            collecting = false;
+        }
+
+        // ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+        // printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+        // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+        // printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+        // rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+    }
+
+    // Якщо завершили цикл, але ще був активний кластер — обробити
+    if (collecting && cluster_size > 0) {
+        int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
+        int best_freq = cluster[0].freq_mhz;
+
+        for (int j = 1; j < cluster_size; j++) {
+            int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+            if (diff > min_diff) {
+                min_diff = diff;
+                best_freq = cluster[j].freq_mhz;
+            }
+        }
+
+        printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+    }
+
+    free(cluster);
+    fclose(f);
+    circle_time = ((delay * (STOP_FREQ - START_FREQ)) / 1000);
+    printf("time spent for one circle is %d ms\n", circle_time);
+}
+
+#define MAX_SILENT_STEPS 3
+int silent_counter = 0;
+
+void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
+{
+    struct rf_rssi rssi;
+    uint32_t value;
+    int32_t gain;
+    const int delay = 5000;
+    int circle_time;
+
+    FILE *f = fopen("/tmp/rssi_scan.csv", "w");
+    if (!f) {
+        perror("Не вдалося відкрити файл для запису");
+        return;
+    }
+    fprintf(f, "Frequency_MHz,RSSI_dBm,G_gain_dB,FPGA_value\n");
+
+    typedef struct {
+        int freq_mhz;
+        uint32_t symbol;
+        uint32_t preamble;
+        uint32_t fpga_value;
+    } rssi_data_t;
+
+    rssi_data_t *cluster = malloc(sizeof(rssi_data_t) * (STOP_FREQ - START_FREQ + 1));
+    if (!cluster) {
+        perror("malloc");
+        fclose(f);
+        return;
+    }
+    int cluster_size = 0;
+    bool collecting = false;
+
+    for (uint16_t i = START_FREQ; i <= STOP_FREQ; i += 1) {
+        int freq_mhz = i;
+        uint64_t freq_hz = (uint64_t)freq_mhz * 1000000ULL;
+
+        ad9361_set_rx_lo_freq(phy, freq_hz);
+        usleep(delay);
+
+        value = fpga_read_reg(reg_addr);
+
+        if (value > 50) {
+
+            collecting = true;
+            silent_counter = 0; // обнуляємо мовчання
+
+            if (ad9361_get_rx_rssi(phy, 0, &rssi) == 0) {
+                ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+                double rssi_dbm = (rssi.symbol > 0)
+                    ? 10.0 * log10((double)rssi.symbol) + RSSI_OFFSET_DBM
+                    : -120.0;
+
+                //  printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+                //  printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+                //  printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+                //      rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+                // printf("Gain: %d dB, RSSI ≈ %.2f dBm\n\n", gain, rssi_dbm);
+
+                fprintf(f, "%d,%.2f,%d,%u\n", freq_mhz, rssi_dbm, gain, value);
+
+                cluster[cluster_size++] = (rssi_data_t){
+                    .freq_mhz = freq_mhz,
+                    .symbol = rssi.symbol,
+                    .preamble = rssi.preamble,
+                    .fpga_value = value
+                };
+            }
+        } else if (collecting && cluster_size > 0) {
+
+            silent_counter++;
+
+            if (silent_counter >= MAX_SILENT_STEPS && cluster_size > 0) {
+                // Завершуємо кластер лише після N тиші
+                int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
+                int best_freq = cluster[0].freq_mhz;
+
+                for (int j = 1; j < cluster_size; j++) {
+                    int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                    if (diff > min_diff) {
+                        min_diff = diff;
+                        best_freq = cluster[j].freq_mhz;
+                    }
+                }
+
+                printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+
+                cluster_size = 0;
+                collecting = false;
+                silent_counter = 0;
+            }
+        }
+        // ad9361_get_rx_rf_gain(phy, 0, &gain);
+
+        // printf("[!] Детекція сигналу на частоті %d МГц\n", freq_mhz);
+        // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, value);
+        // printf("RSSI.symbol = %u, preamble = %u, mult = %d, dur = %u\n",
+        // rssi.symbol, rssi.preamble, rssi.multiplier, rssi.duration);
+    }
+
+    // Якщо завершили цикл, але ще був активний кластер — обробити
+    if (collecting && cluster_size > 0) {
+        int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
+        int best_freq = cluster[0].freq_mhz;
+
+        for (int j = 1; j < cluster_size; j++) {
+            int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+            if (diff > min_diff) {
+                min_diff = diff;
+                best_freq = cluster[j].freq_mhz;
+            }
+        }
+
+        printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+    }
+
+    free(cluster);
+    fclose(f);
+    circle_time = ((delay * (STOP_FREQ - START_FREQ)) / 1000);
+    printf("time spent for one circle is %d ms\n", circle_time);
+}
+
+
+#define default_init_param init_param
 
 // int main() {
 int main(int argc, char *argv[]) {
@@ -145,16 +556,12 @@ int main(int argc, char *argv[]) {
     default_init_param.gpio_sync.number = -1;
     default_init_param.gpio_cal_sw1.number = -1;
     default_init_param.gpio_cal_sw2.number = -1;
- 
-
-
 
     struct ad9361_rf_phy *ad9361_phy;
-    // ad9361_init(&ad9361_phy, &default_init_param);
     int ret = ad9361_init(&ad9361_phy, &default_init_param);
     if (ret < 0) {
         printf("ad9361_init failed: %d\n", ret);
-        return -1;
+        return -1; 
     }
 
     // ad9361_spi_write(spi_desc, 0x010, 0xC0); // conf_1: default DDR
@@ -200,8 +607,8 @@ int main(int argc, char *argv[]) {
 	// ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_SLOWATTACK_AGC);
 	// ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_SLOWATTACK_AGC);
 
-	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
-	ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
+	//ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_FASTATTACK_AGC);
+	//ad9361_set_rx_gain_control_mode(ad9361_phy, 1, RF_GAIN_FASTATTACK_AGC);
 
 	if (argc >= 2) {
     	uint64_t rx_freq = strtoull(argv[1], NULL, 10); // частота в Гц 
@@ -216,6 +623,9 @@ int main(int argc, char *argv[]) {
     	printf("Set RX0 GAIN: %d DB\n", rx_gain);
 	}
 
+    // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
+    // ad9361_set_rx_rf_gain(ad9361_phy, 0, 40);
+
     ad9361_set_rx_rf_bandwidth(ad9361_phy, 5000000); // 10 МГц
 	ad9361_set_rx_sampling_freq(ad9361_phy, 30000000);
 
@@ -228,7 +638,7 @@ int main(int argc, char *argv[]) {
     printf("Кількість частот: %d\n", freqs_amount);
 
     while (true)
-    {
+    { 
 
         if (argc >= 2)
         {
@@ -262,7 +672,10 @@ int main(int argc, char *argv[]) {
         else
         {
             off_t my_register = 0x43C00000;
-		    scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
+		    //scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
+            //scan_frequencies_for_manual_mode(ad9361_phy, freqs, freqs_amount, my_register);
+            //scan_frequencies_2(ad9361_phy, freqs, freqs_amount, my_register);
+            scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
         }
 
     }
