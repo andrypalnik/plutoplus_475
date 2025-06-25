@@ -408,6 +408,7 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
         uint32_t symbol;
         uint32_t preamble;
         uint32_t fpga_value;
+        int32_t gain;
     } rssi_data_t;
 
     rssi_data_t *cluster = malloc(sizeof(rssi_data_t) * (STOP_FREQ - START_FREQ + 1));
@@ -452,7 +453,8 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                     .freq_mhz = freq_mhz,
                     .symbol = rssi.symbol,
                     .preamble = rssi.preamble,
-                    .fpga_value = value
+                    .fpga_value = value,
+                    .gain = gain
                 };
             }
         } else if (collecting && cluster_size > 0) {
@@ -460,19 +462,49 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
             silent_counter++;
 
             if (silent_counter >= MAX_SILENT_STEPS && cluster_size > 0) {
-                // Завершуємо кластер лише після N тиші
-                int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
-                int best_freq = cluster[0].freq_mhz;
+                // // Завершуємо кластер лише після N тиші
+                // int min_diff = abs((int)cluster[0].symbol - (int)cluster[0].preamble);
+                // int best_freq = cluster[0].freq_mhz;
+                // uint32_t best_value = cluster[0].fpga_value;
 
-                for (int j = 1; j < cluster_size; j++) {
+                // for (int j = 1; j < cluster_size; j++) {
+                //     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                //     if (diff > min_diff) {
+                //         min_diff = diff;
+                //         best_freq = cluster[j].freq_mhz;
+                //     }
+
+                //     printf("[!] Детекція сигналу на частоті %d МГц\n", cluster[j].freq_mhz);
+                //     printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, cluster[j].fpga_value);
+                //     printf("RSSI.symbol = %u, preamble = %u, Gain: %d dB, diff  = %d\n",
+                //         cluster[j].symbol, cluster[j].preamble, cluster[j].gain, diff);
+                // }
+
+                // printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+
+
+                int best_freq = -1;
+                int best_score = -1;
+
+                for (int j = 0; j < cluster_size; j++) {
                     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
-                    if (diff > min_diff) {
-                        min_diff = diff;
+                    uint32_t fpga = cluster[j].fpga_value;
+
+                    // Евристика: чим менше diff і більше fpga — тим краще
+                    int score = (int)fpga - diff / 50; // коефіцієнт можна підібрати
+
+                    printf("[!] %d МГц | diff=%d | fpga=%u => score=%d\n",
+                        cluster[j].freq_mhz, diff, fpga, score);
+
+                    if (score > best_score) {
+                        best_score = score;
                         best_freq = cluster[j].freq_mhz;
                     }
                 }
 
-                printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
+                if (best_freq >= 0) {
+                    printf(">>> Центральна частота за евристикою: %d МГц (score = %d)\n\n", best_freq, best_score);
+                }
 
                 cluster_size = 0;
                 collecting = false;
