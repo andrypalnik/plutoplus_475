@@ -57,8 +57,8 @@ uint32_t fpga_read_reg(off_t phys_addr)
     return read_result;
 }
 
-#define START_FREQ   1000
-#define STOP_FREQ    1100  
+#define START_FREQ   600
+#define STOP_FREQ    5950  
 
 void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
 {
@@ -486,26 +486,45 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                 int best_freq = -1;
                 int best_score = -1;
 
+                // for (int j = 0; j < cluster_size; j++) {
+                //     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                //     uint32_t fpga = cluster[j].fpga_value;
+
+                //     // Евристика: чим менше diff і більше fpga — тим краще
+                //     //int score = (int)fpga - diff; // коефіцієнт можна підібрати
+
+                //     //int score = (int)fpga - diff / 10 + gain * 2;
+                    
+                //     // Чим менше diff, більше fpga, і нижчий gain (бо AGC бачить потужний сигнал), тим краще
+                //     int score = (int)fpga * 2 - diff / 10 + (50 - cluster[j].gain) * 3;
+
+                //     printf("[!] %d МГц | diff=%d | fpga=%u => score=%d RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
+                //         cluster[j].freq_mhz, diff, fpga, score, cluster[j].symbol, cluster[j].preamble, cluster[j].gain);
+
+
+                //     // printf("[!] Детекція сигналу на частоті %d МГц\n", cluster[j].freq_mhz);
+                //     // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, cluster[j].fpga_value);
+                //     // printf("RSSI.symbol = %u, preamble = %u, Gain: %d dB, diff  = %d\n",
+                //     //     cluster[j].symbol, cluster[j].preamble, cluster[j].gain, diff);
+
+                //     if (score > best_score) {
+                //         best_score = score;
+                //         best_freq = cluster[j].freq_mhz;
+                //     }
+                // }
+
                 for (int j = 0; j < cluster_size; j++) {
-                    int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                    float norm_symbol = (float)cluster[j].symbol / powf(10.0f, cluster[j].gain / 10.0f);
+                    float norm_preamble = (float)cluster[j].preamble / powf(10.0f, cluster[j].gain / 10.0f);
+                    float norm_diff = fabsf(norm_symbol - norm_preamble); // нормалізована різниця
+
                     uint32_t fpga = cluster[j].fpga_value;
 
-                    // Евристика: чим менше diff і більше fpga — тим краще
-                    //int score = (int)fpga - diff; // коефіцієнт можна підібрати
+                    // Евристика: більше fpga, менший norm_diff
+                    int score = (int)fpga + (int)(norm_diff * 100.0f); // масштабуємо, щоб привести до цілих чисел
 
-                    //int score = (int)fpga - diff / 10 + gain * 2;
-                    
-                    // Чим менше diff, більше fpga, і нижчий gain (бо AGC бачить потужний сигнал), тим краще
-                    int score = (int)fpga * 2 - diff / 10 + (50 - cluster[j].gain) * 3;
-
-                    printf("[!] %d МГц | diff=%d | fpga=%u => score=%d RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
-                        cluster[j].freq_mhz, diff, fpga, score, cluster[j].symbol, cluster[j].preamble, cluster[j].gain);
-
-
-                    // printf("[!] Детекція сигналу на частоті %d МГц\n", cluster[j].freq_mhz);
-                    // printf("FPGA регістр (0x%lX): %u\n", (unsigned long)reg_addr, cluster[j].fpga_value);
-                    // printf("RSSI.symbol = %u, preamble = %u, Gain: %d dB, diff  = %d\n",
-                    //     cluster[j].symbol, cluster[j].preamble, cluster[j].gain, diff);
+                    printf("[!] %d МГц | norm_diff=%.2f | fpga=%u => score=%d RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
+                        cluster[j].freq_mhz, norm_diff, fpga, score, cluster[j].symbol, cluster[j].preamble, cluster[j].gain);
 
                     if (score > best_score) {
                         best_score = score;
@@ -666,8 +685,8 @@ int main(int argc, char *argv[]) {
     	printf("Set RX0 GAIN: %d DB\n", rx_gain);
 	}
 
-     //ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
-     //ad9361_set_rx_rf_gain(ad9361_phy, 0, 40);
+    // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
+    //  ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
 
     ad9361_set_rx_rf_bandwidth(ad9361_phy, 5000000); // 10 МГц
 	ad9361_set_rx_sampling_freq(ad9361_phy, 30000000);
