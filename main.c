@@ -57,7 +57,7 @@ uint32_t fpga_read_reg(off_t phys_addr)
     return read_result;
 }
 
-#define START_FREQ   600
+#define START_FREQ   5500
 #define STOP_FREQ    5950  
 
 void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
@@ -483,8 +483,8 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                 // printf(">>> Виявлено центральну частоту: %d МГц (max. |symbol - preamble| = %d)\n\n", best_freq, min_diff);
 
 
-                int best_freq = -1;
-                int best_score = -1;
+                // int best_freq = -1;
+                // int best_score = -1;
 
                 // for (int j = 0; j < cluster_size; j++) {
                 //     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
@@ -513,18 +513,129 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                 //     }
                 // }
 
+                // if (best_freq >= 0) {
+                //     printf(">>> Центральна частота за евристикою: %d МГц (score = %d)\n\n", best_freq, best_score);
+                // }
+
+
+                // int best_freq = -1;
+                // int best_score = -1;
+
+                // for (int j = 0; j < cluster_size; j++) {
+                //     float norm_symbol = (float)cluster[j].symbol / powf(10.0f, cluster[j].gain / 10.0f);
+                //     float norm_preamble = (float)cluster[j].preamble / powf(10.0f, cluster[j].gain / 10.0f);
+                //     float norm_diff = fabsf(norm_symbol - norm_preamble); // нормалізована різниця
+
+                //     uint32_t fpga = cluster[j].fpga_value;
+
+                //     // Евристика: більше fpga, менший norm_diff
+                //     int score = (int)fpga + (int)(norm_diff * 100.0f); // масштабуємо, щоб привести до цілих чисел
+
+                //     printf("[!] %d МГц | norm_diff=%.2f | fpga=%u => score=%d RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
+                //         cluster[j].freq_mhz, norm_diff, fpga, score, cluster[j].symbol, cluster[j].preamble, cluster[j].gain);
+
+                //     if (score > best_score) {
+                //         best_score = score;
+                //         best_freq = cluster[j].freq_mhz;
+                //     }
+                // }
+
+                // if (best_freq >= 0) {
+                //     printf(">>> Центральна частота за евристикою: %d МГц (score = %d)\n\n", best_freq, best_score);
+                // }
+
+
+                // float max_diff = 1.0f;
+                // float max_fpga = 1.0f;
+
+                // // Спочатку знайдемо max для нормалізації
+                // for (int j = 0; j < cluster_size; j++) {
+                //     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                //     if (diff > max_diff) max_diff = diff;
+                //     if (cluster[j].fpga_value > max_fpga) max_fpga = cluster[j].fpga_value;
+                // }
+
+                // int best_freq = -1;
+                // float best_score = -1e9;
+
+                // for (int j = 0; j < cluster_size; j++) {
+                //     int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                //     uint32_t fpga = cluster[j].fpga_value;
+                //     int gain = cluster[j].gain;
+
+                //     float norm_diff = (float)diff / max_diff;
+                //     float norm_fpga = (float)fpga / max_fpga;
+                //     float norm_symbol = (float)cluster[j].symbol / powf(10.0f, gain / 10.0f);
+                //     float norm_preamble = (float)cluster[j].preamble / powf(10.0f, gain / 10.0f);
+                //     float norm_symbol_diff = fabsf(norm_symbol - norm_preamble);
+
+                
+                //     float score = norm_fpga + norm_diff;
+
+                //     printf("[!] %d МГц | norm_diff=%.2f | norm_fpga=%.2f | norm_sym_diff=%.2f => score=%.2f RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
+                //         cluster[j].freq_mhz, norm_diff, norm_fpga, norm_symbol_diff, score,
+                //         cluster[j].symbol, cluster[j].preamble, gain);
+
+                //     if (score > best_score) {
+                //         best_score = score;
+                //         best_freq = cluster[j].freq_mhz;
+                //     }
+                // }
+
+                // printf(">>> Центральна частота за евристикою: %d МГц (score = %.2f)\n", best_freq, best_score);
+
+
+                // Знайди мін/макс для нормалізації
+                uint32_t max_fpga = 1;
+                int max_gain = 1, min_gain = 255;
+                int max_positive_diff = 1;
+                int max_negative_diff = 1;
+
                 for (int j = 0; j < cluster_size; j++) {
-                    float norm_symbol = (float)cluster[j].symbol / powf(10.0f, cluster[j].gain / 10.0f);
-                    float norm_preamble = (float)cluster[j].preamble / powf(10.0f, cluster[j].gain / 10.0f);
-                    float norm_diff = fabsf(norm_symbol - norm_preamble); // нормалізована різниця
+                    int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                    if (cluster[j].fpga_value > max_fpga) max_fpga = cluster[j].fpga_value;
+                    if (cluster[j].gain > max_gain) max_gain = cluster[j].gain;
+                    if (cluster[j].gain < min_gain) min_gain = cluster[j].gain;
 
+                    if (cluster[j].preamble > cluster[j].symbol && diff > max_positive_diff)
+                        max_positive_diff = diff;
+                    if (cluster[j].preamble < cluster[j].symbol && diff > max_negative_diff)
+                        max_negative_diff = diff;
+                }
+
+                // Обрахунок score
+                float best_score = -1e9;
+                int best_freq = -1;
+
+                for (int j = 0; j < cluster_size; j++) {
                     uint32_t fpga = cluster[j].fpga_value;
+                    int gain = cluster[j].gain;
+                    int diff = abs((int)cluster[j].symbol - (int)cluster[j].preamble);
+                    int dir = cluster[j].preamble - cluster[j].symbol;
 
-                    // Евристика: більше fpga, менший norm_diff
-                    int score = (int)fpga + (int)(norm_diff * 100.0f); // масштабуємо, щоб привести до цілих чисел
+                    float norm_fpga = (float)fpga / max_fpga;
+                    //float norm_gain = (float)(max_gain - gain) / (max_gain - min_gain + 1); // +1 to avoid div0
 
-                    printf("[!] %d МГц | norm_diff=%.2f | fpga=%u => score=%d RSSI.symbol = %u, preamble = %u Gain: %d dB\n",
-                        cluster[j].freq_mhz, norm_diff, fpga, score, cluster[j].symbol, cluster[j].preamble, cluster[j].gain);
+                    float norm_gain = logf(max_gain + 1.0f) - logf(gain + 1.0f);
+                          norm_gain /= logf(max_gain + 1.0f) - logf(min_gain + 1.0f);
+                    float norm_diff;
+
+                    if (dir > 0) { // preamble > symbol
+                        norm_diff = (float)diff / max_positive_diff;
+                    } else if (dir < 0) { // preamble < symbol
+                        norm_diff = 1.0f - (float)diff / max_negative_diff;
+                    } else {
+                        norm_diff = 1.0f; // ідеально
+                    }
+
+                    // Загальний score
+                    float score = norm_fpga * 1.0f + norm_gain * 1.0f + norm_diff * 1.0f;
+
+                    //float score = norm_fpga * 1.0f  + norm_diff * 1.0f;
+
+                    printf("[!] %d МГц | norm_fpga=%.2f norm_gain=%.2f norm_diff=%.2f => score=%.2f | symbol=%u preamble=%u gain=%d fpga=%u\n",
+                        cluster[j].freq_mhz, norm_fpga, norm_gain, norm_diff, score,
+                        cluster[j].symbol, cluster[j].preamble, gain, fpga);
 
                     if (score > best_score) {
                         best_score = score;
@@ -532,9 +643,8 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                     }
                 }
 
-                if (best_freq >= 0) {
-                    printf(">>> Центральна частота за евристикою: %d МГц (score = %d)\n\n", best_freq, best_score);
-                }
+                printf(">>> Центральна частота за евристикою: %d МГц (score = %.2f)\n", best_freq, best_score);
+
 
                 cluster_size = 0;
                 collecting = false;
