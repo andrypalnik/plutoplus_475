@@ -16,6 +16,7 @@ CFLAGS += -DAXI_ADC_NOT_PRESENT
 
 SRC = \
     main.c \
+    detection_freq.c \
     no-OS/drivers/platform/linux/linux_spi.c \
     no-OS/drivers/platform/linux/linux_gpio.c \
     no-OS/drivers/platform/linux/linux_delay.c \
