@@ -1,6 +1,6 @@
 #include "main.h"
 
-#define default_init_param init_param
+#define default_init_param init_param_2
 
 
 extern uint32_t fpga_read_reg(off_t phys_addr);
@@ -18,7 +18,7 @@ struct no_os_spi_init_param spi_param = {
 	.platform_ops = &linux_spi_ops,
 	.extra = "/dev/spidev1.0"
 };
-
+ 
 // int main() {
 int main(int argc, char *argv[]) {
     printf("main start\n");
@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
             //scan_frequencies_2(ad9361_phy, freqs, freqs_amount, my_register);
             scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
         }
-
+   
     }
 
     sleep(1);
