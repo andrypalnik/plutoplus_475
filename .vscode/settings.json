@@ -37,7 +37,9 @@
         "mathcalls.h": "c",
         "mstd_type_traits": "c",
         "stdio.h": "c",
-        "mman.h": "c"
+        "mman.h": "c",
+        "time.h": "c",
+        "types.h": "c"
     },
     "cmake.sourceDirectory": "/home/isatskyi/Documents/V_J/plutoplus_475/no-OS/doc/doxygen"
 }

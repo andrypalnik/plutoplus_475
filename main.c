@@ -1,6 +1,8 @@
 #include "main.h"
+#include <time.h>
 
-#define default_init_param init_param_2
+#define default_init_param init_param
+//#define default_init_param default_init_param
 
 
 extern uint32_t fpga_read_reg(off_t phys_addr);
@@ -22,6 +24,7 @@ struct no_os_spi_init_param spi_param = {
 // int main() {
 int main(int argc, char *argv[]) {
     printf("main start\n");
+    struct timespec start, end;
     // struct no_os_gpio_desc *gpio_resetb;
     // printf("testpoint 1\n");
     // struct no_os_gpio_init_param gpio_param = {
@@ -78,7 +81,7 @@ int main(int argc, char *argv[]) {
 
     ad9361_set_tx_fir_config(ad9361_phy, tx_fir_config);
     ad9361_set_rx_fir_config(ad9361_phy, rx_fir_config);
- 
+    
     // ad9361_phy->pdata->ensm_pin_ctrl = false;
     // ad9361_phy->pdata->ensm_pin_pulse_mode = false; 
 
@@ -131,7 +134,7 @@ int main(int argc, char *argv[]) {
 	}
 
     // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
-    //  ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
+     // ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
 
     ad9361_set_rx_rf_bandwidth(ad9361_phy, 5000000); // 10 МГц
 	ad9361_set_rx_sampling_freq(ad9361_phy, 30000000);
@@ -179,10 +182,14 @@ int main(int argc, char *argv[]) {
         else
         {
             off_t my_register = 0x43C00000;
+            clock_gettime(CLOCK_MONOTONIC, &start);
 		    //scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
             //scan_frequencies_for_manual_mode(ad9361_phy, freqs, freqs_amount, my_register);
             //scan_frequencies_2(ad9361_phy, freqs, freqs_amount, my_register);
             scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
+            printf("⏱ Block scan_frequencies took %ld us\n", delta_us);
         }
    
     }
