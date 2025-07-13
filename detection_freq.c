@@ -44,6 +44,8 @@ typedef struct {
     uint32_t preamble;
     uint32_t fpga_value;
     int32_t gain;
+    int16_t low_level;
+    int16_t black_level;
 } rssi_data_t;
 
 #if 1
@@ -97,12 +99,14 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
     struct timespec start, end;
     struct rf_rssi rssi;
     uint32_t value;
+    uint32_t tmp;
+    int16_t low_level;
+    int16_t black_level;
     int32_t gain;   
     const int delay = 1500;
     int circle_time;
     int cluster_size = 0;
     bool collecting = false;
-
 
     // clock_gettime(CLOCK_MONOTONIC, &start);
     rssi_data_t *cluster = malloc(sizeof(rssi_data_t) * (STOP_FREQ - START_FREQ + 1));
@@ -121,15 +125,22 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
         
         // clock_gettime(CLOCK_MONOTONIC, &start);
         ad9361_set_rx_lo_freq(phy, freq_hz);
+
+        //          clock_gettime(CLOCK_MONOTONIC, &end);
+        //  long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
+        //  printf("⏱ Block set_rx_freq took %ld us\n", delta_us);
         usleep(delay);
 
-        // clock_gettime(CLOCK_MONOTONIC, &end);
-        // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
-        // printf("⏱ Block set_rx_freq took %ld us\n", delta_us);
-
         value = fpga_read_reg(reg_addr);
+        tmp = fpga_read_reg(0x43C00004);
 
-        if (value >10) {
+        low_level = (int16_t)(tmp & 0xFFFF);
+
+        tmp = fpga_read_reg(0x43C00008);
+
+        black_level = (int16_t)(tmp & 0xFFFF);
+
+        if (value >25000) {
 
             collecting = true;
             silent_counter = 0; // обнуляємо мовчання
@@ -155,13 +166,15 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                     .symbol = rssi.symbol,
                     .preamble = rssi.preamble,
                     .fpga_value = value,
-                    .gain = gain
+                    .gain = gain,
+                    .low_level = low_level,
+                    .black_level = black_level
                 };
             }
 
-            // clock_gettime(CLOCK_MONOTONIC, &end);
-            // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
-            // printf("⏱ Block rx_rssi took %ld us\n", delta_us);
+             //clock_gettime(CLOCK_MONOTONIC, &end);
+             //long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
+             //printf("⏱ Block rx_rssi took %ld us\n", delta_us);
 
         } else if (collecting && cluster_size > 0) {
 
@@ -244,23 +257,34 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                     //     cluster[j].preamble,
                     //     gain,
                     //     fpga);
-                    if (score > best_score) {
-                        best_score = score;
+
+
+                    // if (score > best_score) {
+                    //     best_score = score;
+                    //     best_freq = cluster[j].freq_mhz;
+                    // }
+
+                    if ( -500 > cluster[j].black_level && cluster[j].black_level > -3500 && score > 1.2)
+                    {
                         best_freq = cluster[j].freq_mhz;
+                        best_score = score;
                     }
 
                     // clock_gettime(CLOCK_MONOTONIC, &end);
                     // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
                     // printf("⏱ Block best_freq took %ld us\n", delta_us);
 
-                    printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u fpga=%u\n",
+                    printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u sync_counter=%u low_level=%d black_level=%d gain=%d\n",
                         cluster[j].freq_mhz,
                         norm_fpga,
                         norm_diff,
                         score,
                         cluster[j].symbol,
                         cluster[j].preamble,
-                        fpga);
+                        fpga,
+                        cluster[j].low_level,
+                        cluster[j].black_level,
+                        cluster[j].gain);
 
 
                 }

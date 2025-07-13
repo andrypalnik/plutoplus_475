@@ -174,7 +174,25 @@ int main(int argc, char *argv[]) {
             off_t my_register = 0x43C00000;  // заміни на свою адресу
             uint32_t value = fpga_read_reg(my_register);
             //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
-            printf("Зчитано з 0x%lX: %d\n", (unsigned long)my_register, value);
+            printf("Зчитано з 0 hsync counter 0x%lX: %d\n", (unsigned long)my_register, value);
+
+            my_register = 0x43C00004;  // заміни на свою адресу
+            value = fpga_read_reg(my_register);
+            int16_t hsync_val = (int16_t)(value & 0xFFFF);
+            //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
+            printf("Зчитано з 1 low level 1 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
+
+            my_register = 0x43C00008;  // заміни на свою адресу
+            value = fpga_read_reg(my_register);
+            hsync_val = (int16_t)(value & 0xFFFF);
+            //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
+            printf("Зчитано з 2  black level 2  0x%lX: %d\n", (unsigned long)my_register, hsync_val);
+
+            my_register = 0x43C0000C;  // заміни на свою адресу
+            value = fpga_read_reg(my_register);
+            hsync_val = (int16_t)(value & 0xFFFF);
+            //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
+            printf("Зчитано з 3 low level 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
 
             printf("while\n");
             sleep(1);
