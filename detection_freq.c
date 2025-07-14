@@ -21,6 +21,8 @@
 
 #include "ad9361.h"
 #include "ad9361_api.h"
+//#include "main.h"
+#include "struct.h"
 
 // #define START_FREQ   5500
 // #define STOP_FREQ    5950  
@@ -29,24 +31,17 @@
 #define MAX_SILENT_STEPS 5
 #define RSSI_OFFSET_DBM -41.7  // Емпірично підібраний offset
 
+
+
 uint32_t fpga_read_reg(off_t phys_addr);
 void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 void scan_frequencies_2(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 void scan_frequencies_3(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
-void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
+int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
 void scan_frequencies_for_manual_mode(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 
 int silent_counter = 0;
 
-typedef struct {
-    int freq_mhz;
-    uint32_t symbol;
-    uint32_t preamble;
-    uint32_t fpga_value;
-    int32_t gain;
-    int16_t low_level;
-    int16_t black_level;
-} rssi_data_t;
 
 #if 1
 #define MAP_SIZE 4096UL
@@ -94,7 +89,7 @@ uint32_t fpga_read_reg(off_t phys_addr)
     return read_result;
 }
 
-void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr)
+int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr)
 {
     struct timespec start, end;
     struct rf_rssi rssi;
@@ -107,12 +102,13 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
     int circle_time;
     int cluster_size = 0;
     bool collecting = false;
+    int result_count = 0;  // до циклу
 
     // clock_gettime(CLOCK_MONOTONIC, &start);
     rssi_data_t *cluster = malloc(sizeof(rssi_data_t) * (STOP_FREQ - START_FREQ + 1));
     if (!cluster) {
         perror("malloc");
-        return;
+        return -1;
     }
     // clock_gettime(CLOCK_MONOTONIC, &end);
     // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
@@ -268,28 +264,31 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
                     {
                         best_freq = cluster[j].freq_mhz;
                         best_score = score;
+                        out_array[result_count++] = cluster[j]; 
+                        printf(">>> Центральна частота за евристикою: %d МГц (score = %.2f)\n", best_freq, best_score);
+
                     }
 
                     // clock_gettime(CLOCK_MONOTONIC, &end);
                     // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
                     // printf("⏱ Block best_freq took %ld us\n", delta_us);
 
-                    printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u sync_counter=%u low_level=%d black_level=%d gain=%d\n",
-                        cluster[j].freq_mhz,
-                        norm_fpga,
-                        norm_diff,
-                        score,
-                        cluster[j].symbol,
-                        cluster[j].preamble,
-                        fpga,
-                        cluster[j].low_level,
-                        cluster[j].black_level,
-                        cluster[j].gain);
+                    // printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u sync_counter=%u low_level=%d black_level=%d gain=%d\n",
+                    //     cluster[j].freq_mhz,
+                    //     norm_fpga,
+                    //     norm_diff,
+                    //     score,
+                    //     cluster[j].symbol,
+                    //     cluster[j].preamble,
+                    //     fpga,
+                    //     cluster[j].low_level,
+                    //     cluster[j].black_level,
+                    //     cluster[j].gain);
 
 
                 }
 
-                printf(">>> Центральна частота за евристикою: %d МГц (score = %.2f)\n", best_freq, best_score);
+                
                 
                 cluster_size = 0;
                 collecting = false;
@@ -307,6 +306,7 @@ void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, o
     free(cluster);
     //circle_time = ((delay * (STOP_FREQ - START_FREQ)) / 1000);
     //printf("time spent for one circle is %d ms\n", circle_time);
+    return result_count;   
 }
 
 

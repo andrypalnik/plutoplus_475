@@ -1,5 +1,113 @@
 #include "main.h"
 #include <time.h>
+#include "struct.h"
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
+int send_detected_to_host(rssi_data_t *data, int count) {
+    int sockfd;
+    struct sockaddr_in servaddr;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(9000);
+    servaddr.sin_addr.s_addr = inet_addr("192.168.0.20");
+
+    if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        perror("connect");
+        close(sockfd);
+        return -1;
+    }
+
+    // Надсилання списку
+    char line[128];
+    for (int i = 0; i < count; ++i) {
+        snprintf(line, sizeof(line),
+                 "%d MHz | gain = %d | symbol = %u | preamble = %u\n",
+                 data[i].freq_mhz,
+                 data[i].gain,
+                 data[i].symbol,
+                 data[i].preamble);
+        send(sockfd, line, strlen(line), 0);
+    }
+
+    // Отримання команди
+    char cmd[64] = {0};
+    recv(sockfd, cmd, sizeof(cmd) - 1, 0);
+    printf("[>] Отримано команду: %s\n", cmd);
+
+    int jam_freq = 0;
+    if (sscanf(cmd, "JAM %d", &jam_freq) == 1) {
+        printf("[*] Глушити частоту: %d МГц\n", jam_freq);
+        // TODO: викликати jam_logic(jam_freq);
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
+void send_detected_to_host_json(rssi_data_t *data, int count) {
+    int sockfd;
+    struct sockaddr_in servaddr;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        return;
+    }
+
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(9000);
+    servaddr.sin_addr.s_addr = inet_addr("192.168.0.20");  // IP хоста
+
+    if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        perror("connect");
+        close(sockfd);
+        return;
+    }
+
+    // === Формуємо JSON ===
+    char json[4096] = {0};
+    strcat(json, "[\n");
+    for (int i = 0; i < count; ++i) {
+        char entry[256];
+        snprintf(entry, sizeof(entry),
+                 "  {\"freq_mhz\": %d, \"gain\": %d, \"symbol\": %u, \"preamble\": %u, \"black_level\": %d, \"low_level\": %d}%s\n",
+                 data[i].freq_mhz,
+                 data[i].gain,
+                 data[i].symbol,
+                 data[i].preamble,
+                 data[i].black_level,
+                 data[i].low_level,
+                 (i < count - 1) ? "," : "");
+        strcat(json, entry);
+    }
+    strcat(json, "]\n");
+
+    send(sockfd, json, strlen(json), 0);
+
+    // Очікуємо команду від хоста (типу: "JAM 5732")
+    char buffer[64] = {0};
+    recv(sockfd, buffer, sizeof(buffer)-1, 0);
+    printf("[<] Отримано команду: %s\n", buffer);
+
+    // TODO: Розпарсити команду і викликати jammer
+
+    close(sockfd);
+}
+
+
 
 #define default_init_param init_param
 //#define default_init_param default_init_param
@@ -9,7 +117,7 @@ extern uint32_t fpga_read_reg(off_t phys_addr);
 extern void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 extern void scan_frequencies_2(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 extern void scan_frequencies_3(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
-extern void scan_frequencies_4(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
+extern int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
 extern void scan_frequencies_for_manual_mode(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 
 struct no_os_spi_init_param spi_param = {
@@ -20,6 +128,12 @@ struct no_os_spi_init_param spi_param = {
 	.platform_ops = &linux_spi_ops,
 	.extra = "/dev/spidev1.0"
 };
+
+int cmp_gain_desc(const void *a, const void *b) {
+    const rssi_data_t *ra = (const rssi_data_t *)a;
+    const rssi_data_t *rb = (const rssi_data_t *)b;
+    return rb->gain - ra->gain; // від більшого до меншого
+}
  
 // int main() {
 int main(int argc, char *argv[]) {
@@ -124,6 +238,18 @@ int main(int argc, char *argv[]) {
     	uint64_t rx_freq = strtoull(argv[1], NULL, 10); // частота в Гц 
     	ad9361_set_rx_lo_freq(ad9361_phy, rx_freq);
     	printf("Set RX & TX frequency: %llu Hz\n", rx_freq);
+
+        uint64_t freq = 1360000000;
+        ad9361_set_tx_lo_freq(ad9361_phy, freq);  
+        printf("TX LO freq: %llu\n", freq);
+        ad9361_set_tx_sampling_freq(ad9361_phy, 30000000); // 30 МГц приклад
+        ad9361_set_tx_rf_bandwidth(ad9361_phy, 5000000);  // 10 МГц
+        int32_t attn = 0;
+        ad9361_get_tx_attenuation(ad9361_phy, TX2, &attn);
+        printf("TX attenuation: %d\n", attn);
+        ad9361_set_tx_fir_en_dis(ad9361_phy, 0);       // якщо FIR не використовується
+        ad9361_tx_lo_powerdown(ad9361_phy, true);   // вимкнути
+        ad9361_tx_lo_powerdown(ad9361_phy, false);  // знову ввімкнути
 	}
 	
 	if (argc >= 3) {
@@ -194,6 +320,9 @@ int main(int argc, char *argv[]) {
             //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
             printf("Зчитано з 3 low level 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
 
+            // ad9361_set_tx_lo_freq(ad9361_phy, 1360000000);  
+            // ad9361_set_tx_attenuation(ad9361_phy, TX2, 0);
+
             printf("while\n");
             sleep(1);
         }
@@ -204,7 +333,19 @@ int main(int argc, char *argv[]) {
 		    //scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
             //scan_frequencies_for_manual_mode(ad9361_phy, freqs, freqs_amount, my_register);
             //scan_frequencies_2(ad9361_phy, freqs, freqs_amount, my_register);
-            scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
+            //scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
+
+            rssi_data_t detected[2048];
+            int found = scan_frequencies_4(ad9361_phy, detected, 2048, 0x43C00000);
+
+            // Сортуємо за gain (від більшого до меншого)
+            //qsort(detected, found, sizeof(rssi_data_t), cmp_gain_desc);
+
+            //send_detected_to_host(detected, found);
+
+            //send_detected_to_host_json(detected, found);
+
+
             clock_gettime(CLOCK_MONOTONIC, &end);
             long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
             printf("⏱ Block scan_frequencies took %ld us\n", delta_us);

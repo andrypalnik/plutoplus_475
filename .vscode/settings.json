@@ -39,7 +39,8 @@
         "stdio.h": "c",
         "mman.h": "c",
         "time.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "struct.h": "c"
     },
     "cmake.sourceDirectory": "/home/isatskyi/Documents/V_J/plutoplus_475/no-OS/doc/doxygen"
 }
