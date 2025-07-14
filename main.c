@@ -250,7 +250,7 @@ int main(int argc, char *argv[]) {
         ad9361_set_tx_fir_en_dis(ad9361_phy, 0);       // якщо FIR не використовується
         ad9361_tx_lo_powerdown(ad9361_phy, true);   // вимкнути
         ad9361_tx_lo_powerdown(ad9361_phy, false);  // знову ввімкнути
-	}
+	 }
 	
 	if (argc >= 3) {
     	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
