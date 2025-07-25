@@ -114,11 +114,9 @@ void send_detected_to_host_json(rssi_data_t *data, int count) {
 
 
 extern uint32_t fpga_read_reg(off_t phys_addr);
-extern void scan_frequencies(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
-extern void scan_frequencies_2(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
-extern void scan_frequencies_3(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
-extern int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
-extern void scan_frequencies_for_manual_mode(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
+
+extern int scan_frequencies_s(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
+extern int scan_frequencies_bl(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
 
 struct no_os_spi_init_param spi_param = {
 	.device_id = 1,
@@ -251,7 +249,7 @@ int main(int argc, char *argv[]) {
         ad9361_tx_lo_powerdown(ad9361_phy, true);   // вимкнути
         ad9361_tx_lo_powerdown(ad9361_phy, false);  // знову ввімкнути
 	 }
-	
+	  
 	if (argc >= 3) {
     	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
 		int32_t rx_gain = (int32_t)strtol(argv[2], NULL, 10); // дБ
@@ -306,19 +304,19 @@ int main(int argc, char *argv[]) {
             value = fpga_read_reg(my_register);
             int16_t hsync_val = (int16_t)(value & 0xFFFF);
             //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
-            printf("Зчитано з 1 low level 1 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
+            printf("Зчитано з 1 black level 1 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
 
             my_register = 0x43C00008;  // заміни на свою адресу
             value = fpga_read_reg(my_register);
             hsync_val = (int16_t)(value & 0xFFFF);
             //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
-            printf("Зчитано з 2  black level 2  0x%lX: %d\n", (unsigned long)my_register, hsync_val);
+            printf("Зчитано з 2  low level 2  0x%lX: %d\n", (unsigned long)my_register, hsync_val);
 
             my_register = 0x43C0000C;  // заміни на свою адресу
             value = fpga_read_reg(my_register);
             hsync_val = (int16_t)(value & 0xFFFF);
             //printf("Зчитано з 0x%lX: 0x%08X\n", (unsigned long)my_register, value);
-            printf("Зчитано з 3 low level 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
+            printf("Зчитано з 3 top level 0x%lX: %d\n", (unsigned long)my_register, hsync_val);
 
             // ad9361_set_tx_lo_freq(ad9361_phy, 1360000000);  
             // ad9361_set_tx_attenuation(ad9361_phy, TX2, 0);
@@ -330,13 +328,9 @@ int main(int argc, char *argv[]) {
         {
             off_t my_register = 0x43C00000;
             clock_gettime(CLOCK_MONOTONIC, &start);
-		    //scan_frequencies(ad9361_phy, freqs, freqs_amount, my_register);
-            //scan_frequencies_for_manual_mode(ad9361_phy, freqs, freqs_amount, my_register);
-            //scan_frequencies_2(ad9361_phy, freqs, freqs_amount, my_register);
-            //scan_frequencies_4(ad9361_phy, freqs, freqs_amount, my_register);
 
             rssi_data_t detected[2048];
-            int found = scan_frequencies_4(ad9361_phy, detected, 2048, 0x43C00000);
+            int found = scan_frequencies_s(ad9361_phy, detected, 2048, 0x43C00000);
 
             // Сортуємо за gain (від більшого до меншого)
             //qsort(detected, found, sizeof(rssi_data_t), cmp_gain_desc);
