@@ -47,6 +47,19 @@ int silent_counter = 0;
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
+
+#define FPGA_BASE 0x43C00000
+#define REG_TX_ENABLE (0x43C0000C )  // адреса регістра, де ти зберігаєш enable
+
+void set_tx_enable(int enable) {
+    int fd = open("/dev/mem", O_RDWR | O_SYNC);
+    void *base = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_BASE);
+    volatile uint32_t *reg = (uint32_t *)((char*)base + (REG_TX_ENABLE & 0xFFF));
+    *reg = enable ? 1 : 0;
+    munmap(base, 4096);
+    close(fd);
+}
+
 uint32_t fpga_read_reg(off_t phys_addr)
 {
     int mem_fd;
@@ -273,17 +286,17 @@ int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int ma
                     // long delta_us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
                     // printf("⏱ Block best_freq took %ld us\n", delta_us);
 
-                    // printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u sync_counter=%u low_level=%d black_level=%d gain=%d\n",
-                    //     cluster[j].freq_mhz,
-                    //     norm_fpga,
-                    //     norm_diff,
-                    //     score,
-                    //     cluster[j].symbol,
-                    //     cluster[j].preamble,
-                    //     fpga,
-                    //     cluster[j].low_level,
-                    //     cluster[j].black_level,
-                    //     cluster[j].gain);
+                    printf("[!] %d МГц | norm_fpga=%.2f norm_diff=%.2f  score=%.2f symbol=%u preamble=%u sync_counter=%u low_level=%d black_level=%d gain=%d\n",
+                        cluster[j].freq_mhz,
+                        norm_fpga,
+                        norm_diff,
+                        score,
+                        cluster[j].symbol,
+                        cluster[j].preamble,
+                        fpga,
+                        cluster[j].low_level,
+                        cluster[j].black_level,
+                        cluster[j].gain);
 
 
                 }

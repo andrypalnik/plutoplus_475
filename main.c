@@ -4,6 +4,11 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+
 
 int send_detected_to_host(rssi_data_t *data, int count) {
     int sockfd;
@@ -50,12 +55,6 @@ int send_detected_to_host(rssi_data_t *data, int count) {
     close(sockfd);
     return 0;
 }
-
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 
 void send_detected_to_host_json(rssi_data_t *data, int count) {
     int sockfd;
@@ -106,7 +105,7 @@ void send_detected_to_host_json(rssi_data_t *data, int count) {
 
     close(sockfd);
 }
-
+    
 
 
 #define default_init_param init_param
@@ -119,6 +118,7 @@ extern void scan_frequencies_2(struct ad9361_rf_phy *phy, int *freqs, uint16_t c
 extern void scan_frequencies_3(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
 extern int scan_frequencies_4(struct ad9361_rf_phy *phy, rssi_data_t *out_array, int max_count, off_t reg_addr);
 extern void scan_frequencies_for_manual_mode(struct ad9361_rf_phy *phy, int *freqs, uint16_t count, off_t reg_addr);
+extern void set_tx_enable(int enable);
 
 struct no_os_spi_init_param spi_param = {
 	.device_id = 1,
@@ -239,25 +239,54 @@ int main(int argc, char *argv[]) {
     	ad9361_set_rx_lo_freq(ad9361_phy, rx_freq);
     	printf("Set RX & TX frequency: %llu Hz\n", rx_freq);
 
-        uint64_t freq = 1360000000;
-        ad9361_set_tx_lo_freq(ad9361_phy, freq);  
-        printf("TX LO freq: %llu\n", freq);
+        // uint64_t tx_freq = strtoull(argv[2], NULL, 10); // частота в Гц 
+    	// ad9361_set_tx_lo_freq(ad9361_phy, tx_freq);
+    	// printf("Set RX & TX frequency: %llu Hz\n", tx_freq);
+
+        uint64_t tx_freq = 1360000000;
+        ad9361_set_tx_lo_freq(ad9361_phy, tx_freq);  
+        printf("TX LO freq: %llu\n", tx_freq);
         ad9361_set_tx_sampling_freq(ad9361_phy, 30000000); // 30 МГц приклад
         ad9361_set_tx_rf_bandwidth(ad9361_phy, 5000000);  // 10 МГц
         int32_t attn = 0;
-        ad9361_get_tx_attenuation(ad9361_phy, TX2, &attn);
+        ad9361_get_tx_attenuation(ad9361_phy, TX1, &attn);
         printf("TX attenuation: %d\n", attn);
         ad9361_set_tx_fir_en_dis(ad9361_phy, 0);       // якщо FIR не використовується
+
+
         ad9361_tx_lo_powerdown(ad9361_phy, true);   // вимкнути
         ad9361_tx_lo_powerdown(ad9361_phy, false);  // знову ввімкнути
+
+        // // 1. Залишаєш ENSM у FDD
+        // ad9361_set_en_state_machine_mode(ad9361_phy, ENSM_MODE_FDD);
+
+        // // 2. Вимикаєш TX LO
+        // ad9361_tx_lo_powerdown(ad9361_phy, true);
+
+        // 3. (опц.) блокуєш ODDR на FPGA
+        set_tx_enable(1);
+
+
+
+        // ad9361_ensm_set_state(ad9361_phy, ENSM_STATE_ALERT, true); // Це відключає TX state
+
+        // ad9361_set_en_state_machine_mode(ad9361_phy, ENSM_MODE_FDD);
+        // usleep(10000);
+        // ad9361_ensm_set_state(ad9361_phy, ENSM_STATE_RX, true);
 	 }
 	
-	if (argc >= 3) {
-    	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
-		int32_t rx_gain = (int32_t)strtol(argv[2], NULL, 10); // дБ
-    	ad9361_set_rx_rf_gain(ad9361_phy, 0, rx_gain);
-    	printf("Set RX0 GAIN: %d DB\n", rx_gain);
-	}
+	// if (argc >= 3) {
+    // 	ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
+	// 	int32_t rx_gain = (int32_t)strtol(argv[2], NULL, 10); // дБ
+    // 	ad9361_set_rx_rf_gain(ad9361_phy, 0, rx_gain);
+    // 	printf("Set RX0 GAIN: %d DB\n", rx_gain);
+	// }
+    //ad9361_spi_write(ad9361_phy->spi, 0x014, 0x00);
+    //set_tx_enable(0);
+
+
+    // ad9361_tx_lo_powerdown(ad9361_phy, true);  // Це вимикає TX LO
+    // ad9361_ensm_set_state(ad9361_phy, ENSM_STATE_ALERT, true); // Це відключає TX state
 
     // ad9361_set_rx_gain_control_mode(ad9361_phy, 0, RF_GAIN_MGC);
      // ad9361_set_rx_rf_gain(ad9361_phy, 0, 0);
@@ -322,7 +351,7 @@ int main(int argc, char *argv[]) {
 
             // ad9361_set_tx_lo_freq(ad9361_phy, 1360000000);  
             // ad9361_set_tx_attenuation(ad9361_phy, TX2, 0);
-
+  
             printf("while\n");
             sleep(1);
         }
