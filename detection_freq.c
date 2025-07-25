@@ -42,6 +42,19 @@ int silent_counter = 0;
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
+
+#define FPGA_BASE 0x43C00000
+#define REG_TX_ENABLE (0x43C0000C )  // адреса регістра, де ти зберігаєш enable
+
+void set_tx_enable(int enable) {
+    int fd = open("/dev/mem", O_RDWR | O_SYNC);
+    void *base = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_BASE);
+    volatile uint32_t *reg = (uint32_t *)((char*)base + (REG_TX_ENABLE & 0xFFF));
+    *reg = enable ? 1 : 0;
+    munmap(base, 4096);
+    close(fd);
+}
+
 uint32_t fpga_read_reg(off_t phys_addr)
 {
     int mem_fd;
